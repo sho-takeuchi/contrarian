@@ -1,0 +1,9 @@
+# Versions verified for this project on 2026-10-23 (Python 3.14, Windows).
+# Install into .venv; update this file together with the security audit and tests.
+requests==2.34.2
+urllib3==2.8.0
+certifi==2026.10.19
+charset-normalizer==3.5.2
+idna==3.20
+tzdata==2026.5; sys_platform == "win32"
+setuptools==84.2.1

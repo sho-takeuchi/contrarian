@@ -1,0 +1,12 @@
+.env*
+!.env.example
+.venv/
+__pycache__/
+*.egg-info/
+build/
+dist/
+data/*
+logs/*
+outputs/*
+/inputs/
+.run.lock
