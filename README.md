@@ -2,6 +2,16 @@
 
 第1段階で月足の長期安値圏・安値維持・3か月平均の上抜け、第2段階で確定週足の上向き、第3段階で日足の短期調整を判定します。発注機能はありません。
 
+## チャートのイメージ
+
+同じ架空銘柄が第1〜第3段階の条件をすべて満たす例です。月足の長期安値圏・反発、週足の上向き、日足の短期調整を並べています。実在の銘柄や株価ではありません。
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/screening-chart-shapes-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/screening-chart-shapes-light.png">
+  <img alt="3段階の通過例。月足は長期安値圏で直近3か月の安値を維持し3か月平均を上回る。確定週足は上向きの5週平均より上、日足は下向きの5日平均より下にある。" src="docs/images/screening-chart-shapes-light.png" width="1024">
+</picture>
+
 ## 1. 作業フォルダーと動作環境
 
 Python 3.11以上が必要です。WindowsではPowerShell、macOSではターミナル（zsh / bash）を使用します。
