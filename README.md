@@ -4,7 +4,10 @@
 
 ## 1. 作業フォルダーと動作環境
 
-PowerShellで以下を実行します。作業フォルダーは、実際に保存した場所に置き換えてください。
+Python 3.11以上が必要です。WindowsではPowerShell、macOSではターミナル（zsh / bash）を使用します。
+作業フォルダーは、実際に保存した場所に置き換えてください。
+
+### Windows（PowerShell）
 
 ```powershell
 Set-Location -LiteralPath 'C:\path\to\contrarian'
@@ -14,12 +17,23 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt
 ```
 
-Python 3.11以上が必要です。共有Python環境の古いライブラリを読み込まないよう、`--system-site-packages` は使用しません。
+### macOS（ターミナル：zsh / bash）
+
+```sh
+cd '/path/to/contrarian'
+python3 --version
+python3 -m venv .venv
+./.venv/bin/python -m pip install --upgrade pip
+./.venv/bin/python -m pip install -r requirements-lock.txt
+```
+
+macOSでは、最初の環境作成に `python3` を使用します。未導入、または3.11未満の場合は、Python 3.11以上をインストールしてから進めてください。
+共有Python環境の古いライブラリを読み込まないよう、`--system-site-packages` は使用しません。
 `requirements-lock.txt` は検証した直接・間接依存とビルド用ライブラリのバージョンを固定しています。
 `pyproject.toml` にもセキュリティ修正版の最低バージョンを指定しています。
 
 ソースから直接実行できるため、このプロジェクト自体のインストールは不要です。
-以下の操作例では、毎回 `.venv` 内のPythonを明示します。PowerShellのスクリプト実行ポリシーの変更や、環境の有効化は必要ありません。
+以下の操作例では、OSごとに `.venv` 内のPythonを明示します。仮想環境の有効化（activate）は不要です。WindowsでもPowerShellのスクリプト実行ポリシーを変更する必要はありません。
 既に `.venv` がある場合も、上記のpip更新と `requirements-lock.txt` のインストールで依存関係を更新してください。
 
 コード、補助入力、キャッシュ、ログ、結果はすべてこのプロジェクト内に作成します。
@@ -32,7 +46,9 @@ J-Quantsのダッシュボードの API Keys 画面で、V2用APIキーを発行
 - ダッシュボード: <https://jpx-jquants.com/>
 - 認証の公式案内: <https://jpx-jquants.com/ja/spec/quickstart>
 
-同じPowerShellで次を実行します。入力は画面に表示されません。
+以降のコマンドを実行するのと同じターミナルで、次を実行します。どちらの方法でも、キーの入力は画面に表示されません。
+
+### Windows（PowerShell）
 
 ```powershell
 $secureKey = Read-Host 'J-Quants APIキー' -AsSecureString
@@ -40,11 +56,32 @@ $env:JQUANTS_API_KEY = [System.Net.NetworkCredential]::new('', $secureKey).Passw
 Remove-Variable secureKey
 ```
 
-キーはそのPowerShellとそこから起動するPythonにだけ有効です。別の端末やCodexの実行環境には自動反映されません。
+### macOS（ターミナル：zsh / bash）
+
+```sh
+printf 'J-Quants APIキー: '
+IFS= read -r -s JQUANTS_API_KEY
+printf '\n'
+export JQUANTS_API_KEY
+```
+
+キーは設定したシェルと、そこから起動するPythonにだけ有効です。PowerShellやmacOSのターミナルのタブ・ウィンドウを閉じた場合、次回は再設定してください。別の端末やCodexの実行環境には自動反映されません。
 キーをチャット・ソース・CSVに貼り付けないでください。設定確認は値を表示せず行えます。
+
+**Windows（PowerShell）**
 
 ```powershell
 [bool]$env:JQUANTS_API_KEY
+```
+
+**macOS（ターミナル：zsh / bash）**
+
+```sh
+if [ -n "${JQUANTS_API_KEY:-}" ]; then
+    printf '設定済み\n'
+else
+    printf '未設定\n'
+fi
 ```
 
 ## 3. 上場日CSVの用意
@@ -56,8 +93,16 @@ J-Quantsの銘柄一覧に上場日がないため、JPX公式の補助CSVが必
 3. ダウンロードしたCSVを `inputs` フォルダーへ置く。
 4. 次のコマンドで取り込む（ファイル名は実際の名前に置き換える）。
 
+**Windows（PowerShell）**
+
 ```powershell
 .\.venv\Scripts\python.exe -m jp_screening prepare-listings --listing-file '.\inputs\JPXから取得したCSV.csv'
+```
+
+**macOS（ターミナル：zsh / bash）**
+
+```sh
+./.venv/bin/python -m jp_screening prepare-listings --listing-file './inputs/JPXから取得したCSV.csv'
 ```
 
 読み込み可能なコード列名：`Code`、`code`、`コード`、`銘柄コード`、`証券コード`。
@@ -76,10 +121,20 @@ Code,listing_date
 
 直接参照可能な公式CSVリンクがある場合は自動取得も試せます。
 
+**Windows（PowerShell）**
+
 ```powershell
 .\.venv\Scripts\python.exe -m jp_screening prepare-listings
 # 公式CSVの直接リンクを把握している場合
 .\.venv\Scripts\python.exe -m jp_screening prepare-listings --listing-url 'https://JPX公式サイトのCSVリンク'
+```
+
+**macOS（ターミナル：zsh / bash）**
+
+```sh
+./.venv/bin/python -m jp_screening prepare-listings
+# 公式CSVの直接リンクを把握している場合
+./.venv/bin/python -m jp_screening prepare-listings --listing-url 'https://JPX公式サイトのCSVリンク'
 ```
 
 JPXポータルはJavaScriptで動作するため、直接CSVリンクを発見できない場合は手動取得の案内を表示します。
@@ -91,8 +146,16 @@ JPXポータルはJavaScriptで動作するため、直接CSVリンクを発見�
 
 各営業日の引け後、日足データ公開後に実行します。
 
+**Windows（PowerShell）**
+
 ```powershell
 .\.venv\Scripts\python.exe -m jp_screening sample
+```
+
+**macOS（ターミナル：zsh / bash）**
+
+```sh
+./.venv/bin/python -m jp_screening sample
 ```
 
 株式・REIT、上場8～10年・10年以上、調整係数の変更履歴を含むよう、原則10銘柄を選びます。
@@ -101,14 +164,30 @@ JPXポータルはJavaScriptで動作するため、直接CSVリンクを発見�
 
 指定銘柄で検証する場合：
 
+**Windows（PowerShell）**
+
 ```powershell
 .\.venv\Scripts\python.exe -m jp_screening sample --codes 7203 6758 8951
 ```
 
+**macOS（ターミナル：zsh / bash）**
+
+```sh
+./.venv/bin/python -m jp_screening sample --codes 7203 6758 8951
+```
+
 ### 全銘柄の第1段階判定
+
+**Windows（PowerShell）**
 
 ```powershell
 .\.venv\Scripts\python.exe -m jp_screening all
+```
+
+**macOS（ターミナル：zsh / bash）**
+
+```sh
+./.venv/bin/python -m jp_screening all
 ```
 
 全銘柄実行時も、先に少数照合を実行します。不一致があれば全銘柄判定へ進みません。
@@ -117,17 +196,34 @@ JPXポータルはJavaScriptで動作するため、直接CSVリンクを発見�
 
 絞った範囲で同じ処理を試す場合：
 
+**Windows（PowerShell）**
+
 ```powershell
 .\.venv\Scripts\python.exe -m jp_screening all --codes 7203,6758,8951
+```
+
+**macOS（ターミナル：zsh / bash）**
+
+```sh
+./.venv/bin/python -m jp_screening all --codes 7203,6758,8951
 ```
 
 ### 第2段階：週足条件も適用する
 
 最新データで第1段階から第2段階まで判定する場合：
 
+**Windows（PowerShell）**
+
 ```powershell
 .\.venv\Scripts\python.exe -m jp_screening sample --stage 2
 .\.venv\Scripts\python.exe -m jp_screening all --stage 2
+```
+
+**macOS（ターミナル：zsh / bash）**
+
+```sh
+./.venv/bin/python -m jp_screening sample --stage 2
+./.venv/bin/python -m jp_screening all --stage 2
 ```
 
 各実行で月足条件を再判定し、その時点で第1段階を通過した銘柄だけを週足で評価します。
@@ -135,8 +231,16 @@ JPXポータルはJavaScriptで動作するため、直接CSVリンクを発見�
 
 保存済みデータと同じ判定日で、週足条件を検証する場合は次を使用します。APIキーや再取得は不要です。
 
+**Windows（PowerShell）**
+
 ```powershell
 .\.venv\Scripts\python.exe -m jp_screening weekly --run-id '20261022_220242_110790_recompute'
+```
+
+**macOS（ターミナル：zsh / bash）**
+
+```sh
+./.venv/bin/python -m jp_screening weekly --run-id '20261022_220242_110790_recompute'
 ```
 
 このコマンドも、保存済みの日足から第1段階を再計算してから週足条件を適用します。
@@ -147,15 +251,32 @@ JPXポータルはJavaScriptで動作するため、直接CSVリンクを発見�
 
 最新データで第1段階から第3段階まで再判定する場合：
 
+**Windows（PowerShell）**
+
 ```powershell
 .\.venv\Scripts\python.exe -m jp_screening sample --stage 3
 .\.venv\Scripts\python.exe -m jp_screening all --stage 3
 ```
 
+**macOS（ターミナル：zsh / bash）**
+
+```sh
+./.venv/bin/python -m jp_screening sample --stage 3
+./.venv/bin/python -m jp_screening all --stage 3
+```
+
 保存済みの株価を使い、同じ判定日で第3段階まで検証する場合（APIキー不要）：
+
+**Windows（PowerShell）**
 
 ```powershell
 .\.venv\Scripts\python.exe -m jp_screening daily --run-id '20261022_224307_516449_stage2'
+```
+
+**macOS（ターミナル：zsh / bash）**
+
+```sh
+./.venv/bin/python -m jp_screening daily --run-id '20261022_224307_516449_stage2'
 ```
 
 `recompute --run-id 実行ID --stage 3` でも同じ処理を実行できます。
@@ -213,8 +334,16 @@ APIキー未設定・認証失敗・更新待ちは終了コード2です。取�
 実行時の入力は `data/snapshots/実行ID.jsonl.gz` に保存します。データベースの更新後も、同じ入力から再計算できます。
 スナップショットのハッシュと計算結果のハッシュが一致しなければエラーにします。
 
+**Windows（PowerShell）**
+
 ```powershell
 .\.venv\Scripts\python.exe -m jp_screening replay --run-id 'outputs内の実行ID'
+```
+
+**macOS（ターミナル：zsh / bash）**
+
+```sh
+./.venv/bin/python -m jp_screening replay --run-id 'outputs内の実行ID'
 ```
 
 `replay` は保存時の月足終値ルールと週足条件を使い、元の合否を再現します。
@@ -224,8 +353,16 @@ APIキー未設定・認証失敗・更新待ちは終了コード2です。取�
 
 保存した同じ株価を、新しい月足終値ルールで判定し直す場合は次を使用します。APIキーは不要です。
 
+**Windows（PowerShell）**
+
 ```powershell
 .\.venv\Scripts\python.exe -m jp_screening recompute --run-id 'outputs内の実行ID'
+```
+
+**macOS（ターミナル：zsh / bash）**
+
+```sh
+./.venv/bin/python -m jp_screening recompute --run-id 'outputs内の実行ID'
 ```
 
 実行段階に応じて `_recompute`・`_stage2`・`_stage3` 付きの新しい結果フォルダーを作成します。元の結果は上書きしません。
@@ -234,8 +371,16 @@ APIキー未設定・認証失敗・更新待ちは終了コード2です。取�
 
 APIキーがなくても、合成データでCSV出力・判定・再計算を試せます。
 
+**Windows（PowerShell）**
+
 ```powershell
 .\.venv\Scripts\python.exe -m jp_screening demo
+```
+
+**macOS（ターミナル：zsh / bash）**
+
+```sh
+./.venv/bin/python -m jp_screening demo
 ```
 
 `_DEMO` 付きのフォルダーに、通過・上限超過・安値割れ・終値欠損の4件を作成します。
@@ -243,8 +388,16 @@ APIキーがなくても、合成データでCSV出力・判定・再計算を�
 
 自動テスト：
 
+**Windows（PowerShell）**
+
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+**macOS（ターミナル：zsh / bash）**
+
+```sh
+./.venv/bin/python -m unittest discover -s tests -v
 ```
 
 ## 7. 判定仕様
