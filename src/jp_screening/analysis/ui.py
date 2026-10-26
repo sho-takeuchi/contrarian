@@ -60,13 +60,26 @@ def main():
         result = query(reader, Intent(kind=mode, codes=[code] if code else [], stage=stage,
                                       start=start, end=end, rules_key=rule, limit=500))
         st.write(f"対象 {result['total']} 件")
-        show_table(result["rows"])
+        labels = {
+            "run_id": "実行ID", "id": "実行ID", "code": "銘柄コード", "name": "銘柄名",
+            "product": "商品区分", "s1": "第1段階判定", "s2": "第2段階判定", "s3": "第3段階判定",
+            "close": "判定時終値（円）", "features": "判定時の条件値", "payload": "判定内容",
+            "asof": "判定日", "rules_key": "判定ルール", "count": "通過観測回数",
+            "before": "前回判定", "after": "今回判定", "from_date": "比較元日", "to_date": "比較先日",
+            "reason": "判定理由", "total": "対象銘柄数", "stage1": "第1段階通過数",
+            "stage2": "第2段階通過数", "stage3": "第3段階通過数", "settings": "実行設定",
+        }
+        show_table(result["rows"], labels)
         if mode == "stages" and result["rows"]:
-            st.line_chart(pd.DataFrame(result["rows"]).set_index("asof")[["stage1","stage2","stage3"]])
+            stage_frame = pd.DataFrame(result["rows"]).rename(columns={
+                "asof": "判定日", "stage1": "第1段階通過数",
+                "stage2": "第2段階通過数", "stage3": "第3段階通過数",
+            })
+            st.line_chart(stage_frame.set_index("判定日")[["第1段階通過数", "第2段階通過数", "第3段階通過数"]])
         if result["truncated"]:
             st.info("先頭500件を表示しています。期間や銘柄を絞り込めます。")
         with st.expander("根拠となる実行"):
-            show_table(result["runs"])
+            show_table(result["runs"], {"id": "実行ID", "asof": "判定日", "settings": "実行設定"})
     elif page == "追跡一覧":
         result = query(reader, Intent(kind="performance", horizon=horizon, basis=basis, rules_key=rule, limit=500))
         show_table(result["rows"], {
