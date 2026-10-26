@@ -113,7 +113,17 @@ def main():
                 chart_frame = pd.DataFrame(chart).rename(columns={"day": "日付", "close": "調整後終値（円）"})
                 st.line_chart(chart_frame.set_index("日付").sort_index())
     elif page == "条件比較":
-        feature = st.selectbox("比較する条件", FEATURE_NAMES)
+        feature_labels = {
+            "long_low_rise": "長期最安終値からの上昇率（％）",
+            "ceiling_room": "現在値から許容上限までの余裕率（％）",
+            "monthly_low_margin": "直近3か月の最安値が前月安値から上昇した率（％）",
+            "monthly_ma_gap": "月足終値の3か月平均比乖離率（％）",
+            "weekly_ma_gap": "週足終値の5週平均比乖離率（％）",
+            "weekly_ma_change": "5週平均の前週比変化率（％）",
+            "daily_ma_gap": "日足終値の5日平均比乖離率（％）",
+            "daily_ma_change": "5日平均の前日比変化率（％）",
+        }
+        feature = st.selectbox("比較する条件", FEATURE_NAMES, format_func=lambda value:feature_labels[value])
         start = st.date_input("開始日", date.today().replace(month=1, day=1))
         end = st.date_input("終了日", date.today())
         if st.button("比較結果を作成・保存", type="primary"):
