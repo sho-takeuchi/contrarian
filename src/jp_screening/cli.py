@@ -55,6 +55,10 @@ def main(argv=None):
                 summary = manifest["counts"]
         print("結果:", folder)
         print("件数:", summary)
+        from .analysis.integration import optional_import
+        if not optional_import(root, folder):
+            print("スクリーニング完了・DB取り込み失敗。analysis import-runs で再試行できます。", file=sys.stderr)
+            return 3
         return 0
     except ScreeningError as exc:
         print("確認が必要です:", str(exc), file=sys.stderr)
@@ -63,3 +67,4 @@ def main(argv=None):
         # Do not dump response bodies, signed URLs, headers or local secret values.
         print(f"入力・保存データを確認してください ({type(exc).__name__})。READMEの手順を参照してください。", file=sys.stderr)
         return 2
+

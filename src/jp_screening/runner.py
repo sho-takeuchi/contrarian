@@ -21,6 +21,7 @@ from .storage import Store, json_text
 from .verification import compare_prices, reference_check
 from .weekly import WEEKLY_SETTINGS, evaluate_weekly, reference_check_weekly
 from .daily import DAILY_SETTINGS, evaluate_daily, reference_check_daily
+from .provenance import enrich_manifest
 
 LOG = logging.getLogger(__name__)
 
@@ -281,6 +282,7 @@ def run_live(root, mode, key, codes=None, listing_file=None, listing_url=None, s
         if stage == 3:
             manifest["settings"]["daily"] = DAILY_SETTINGS
             manifest["daily_reference_checks"] = {"records":sum(r["stage2_status"]=="通過" for r in results),"errors":0}
+        enrich_manifest(manifest, folder, "sample" if mode == "sample" else "specified" if codes else "all")
         write_json(folder / "run.json", manifest)
         store.save_run(run_id, manifest)
         return folder, manifest
@@ -386,6 +388,7 @@ def replay(root, run_id, *, current_rules=False, stage=None):
         new_manifest["source_validation"] = new_manifest.pop("validation", new_manifest.get("source_validation", []))
         new_manifest["source_spot_checks"] = new_manifest.pop("spot_checks", new_manifest.get("source_spot_checks", []))
         new_manifest["reference_checks"] = {"records":len(results), "errors":0}
+        enrich_manifest(new_manifest, folder)
         write_json(folder / "run.json", new_manifest)
         previous_statuses = {}
         with (root / "outputs" / run_id / "all_results.csv").open(encoding="utf-8-sig", newline="") as f:
@@ -403,3 +406,4 @@ def replay(root, run_id, *, current_rules=False, stage=None):
     if manifest.get("synthetic"):
         (folder / "SYNTHETIC_DATA.txt").write_text(manifest["warning"], encoding="utf-8")
     return folder, counts(results)
+
