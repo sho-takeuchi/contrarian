@@ -234,6 +234,20 @@ class PostgreSQLTests(unittest.TestCase):
         self.assertIsNone(value["intent"]["start"])
         self.assertEqual(D(value["data"]["rows"][0]["return_pct"]),5)
 
+    def test_llm_cannot_put_an_unverified_answer_in_clarification(self):
+        self.load()
+        question = "日足の5日平均からの乖離別に20営業日後の成績を比較してください。"
+        llm = FakeLLM(json.dumps(dict(kind="conditions",clarification=question),ensure_ascii=False))
+        with self.assertRaises(ScreeningError):
+            answer(self.db,llm,question)
+
+    def test_generated_links_are_not_treated_as_document_sources(self):
+        self.load()
+        llm = FakeLLM()
+        with patch.object(llm,"chat",return_value="[架空リンク](https://invalid.example) [D99]"):
+            value = answer(self.db,llm,"候補を教えて",intent_override=Intent(kind="candidates"))
+        self.assertEqual(value["answer"],"架空リンク ")
+
     def test_calendar_api_failure_is_saved_as_incomplete(self):
         api = FakeAPI()
         with patch.object(api,"rows",side_effect=ScreeningError("API停止")):

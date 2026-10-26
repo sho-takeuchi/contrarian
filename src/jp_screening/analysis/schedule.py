@@ -45,9 +45,9 @@ def manage(root, action, dry_run=False):
     if sys.platform == "darwin":
         definition = mac_definition(root)
         path = Path.home() / "Library" / "LaunchAgents" / (LABEL + ".plist")
-        domain = f"gui/{os.getuid()}"
         if dry_run:
             return plistlib.dumps(definition).decode()
+        domain = f"gui/{os.getuid()}"
         if action == "install":
             (root / "logs").mkdir(exist_ok=True)
             path.parent.mkdir(parents=True, exist_ok=True)
