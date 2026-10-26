@@ -18,13 +18,15 @@ from jp_screening.analysis.analytics import query, condition_report
 from jp_screening.analysis.rag import Intent, Ollama, answer, index_document, set_document_active
 
 
-def show_table(rows):
+def show_table(rows, labels=None):
     if not rows:
         st.info("該当する記録はありません。")
         return
     frame = pd.DataFrame(jsonable(rows))
     for col in frame.columns:
         frame[col] = frame[col].map(lambda x:json.dumps(x, ensure_ascii=False) if isinstance(x, (dict,list)) else x)
+    if labels:
+        frame = frame.rename(columns=labels)
     st.dataframe(frame, width="stretch", hide_index=True)
 
 
@@ -67,10 +69,19 @@ def main():
             show_table(result["runs"])
     elif page == "追跡一覧":
         result = query(reader, Intent(kind="performance", horizon=horizon, basis=basis, rules_key=rule, limit=500))
-        show_table(result["rows"])
+        show_table(result["rows"], {
+            "run_id": "実行ID", "code": "銘柄コード", "horizon": "評価期間（営業日）",
+            "basis": "基準価格", "status": "評価状態", "return_pct": "騰落率（％）",
+            "max_up_pct": "期間中の最大上昇率（％）", "max_down_pct": "期間中の最大下落率（％）",
+            "payload": "評価の詳細", "evaluated_at": "評価更新日時", "asof": "判定日",
+            "name": "銘柄名",
+        })
         with reader.transaction(readonly=True) as conn:
             targets = list(conn.execute(select(s.tracking).order_by(s.tracking.c.code)).mappings())
-        show_table([dict(x) for x in targets])
+        show_table([dict(x) for x in targets], {
+            "code": "銘柄コード", "first_date": "追跡開始日", "paused": "追跡停止中",
+            "updated_at": "最終更新日時", "missing_days": "未取得営業日数", "state": "株価取得状態",
+        })
         if targets:
             code = st.selectbox("追跡銘柄", [r["code"] for r in targets])
             current = next(r for r in targets if r["code"] == code)
@@ -86,7 +97,8 @@ def main():
                 factor = factor*quote["factor"] if factor is not None and quote["factor"] is not None else None
             if chart:
                 st.caption("最新の取得日を基準に調整した終値")
-                st.line_chart(pd.DataFrame(chart).set_index("day").sort_index())
+                chart_frame = pd.DataFrame(chart).rename(columns={"day": "日付", "close": "調整後終値（円）"})
+                st.line_chart(chart_frame.set_index("日付").sort_index())
     elif page == "条件比較":
         feature = st.selectbox("比較する条件", FEATURE_NAMES)
         start = st.date_input("開始日", date.today().replace(month=1, day=1))
