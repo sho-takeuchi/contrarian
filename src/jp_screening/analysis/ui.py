@@ -123,8 +123,15 @@ def main():
         result = st.session_state.get("condition_report")
         if result:
             st.caption(result["content"]["note"])
-            show_table(result["content"]["quartiles"]["groups"])
-            show_table(result["content"]["cohorts"])
+            comparison_labels = {
+                "quartile": "条件値の四分位グループ", "asof": "判定日", "product": "商品区分",
+                "group": "比較グループ", "total": "対象件数", "valid": "評価済み件数",
+                "pending": "評価待ち件数", "missing": "欠損件数", "unique_codes": "銘柄数",
+                "mean": "騰落率の平均（％）", "median": "騰落率の中央値（％）",
+                "positive_pct": "上昇割合（％）", "distribution": "騰落率の分布（％）",
+            }
+            show_table(result["content"]["quartiles"]["groups"], comparison_labels)
+            show_table(result["content"]["cohorts"], comparison_labels)
             st.download_button("計算条件と結果を保存（JSON）", json.dumps(result, ensure_ascii=False, indent=2),
                                file_name="condition-report.json", mime="application/json")
     elif page == "資料管理":
@@ -148,7 +155,10 @@ def main():
         with reader.transaction(readonly=True) as conn:
             documents = list(conn.execute(select(s.documents.c.id, s.documents.c.title, s.documents.c.active,
                 s.documents.c.profile, s.documents.c.created_at).order_by(s.documents.c.created_at.desc())).mappings())
-        show_table([dict(x) for x in documents])
+        show_table([dict(x) for x in documents], {
+            "id": "資料ID", "title": "資料名", "active": "検索対象",
+            "profile": "資料の関連付け", "created_at": "登録日時",
+        })
         if documents:
             selected = st.selectbox("検索対象を変更する資料", [x["id"] for x in documents],
                 format_func=lambda x:next(d["title"] + " / " + x[:8] for d in documents if d["id"] == x))
@@ -187,7 +197,9 @@ def main():
         source = st.text_input("結果フォルダー", str(config.root / "outputs"))
         if st.button("過去の結果を取り込む"):
             from jp_screening.analysis.ingest import import_runs
-            show_table(import_runs(writer, source))
+            show_table(import_runs(writer, source), {
+                "run": "実行ID", "status": "取り込み結果", "reason": "確認内容",
+            })
         left, right = st.columns(2)
         if left.button("株価・評価を更新"):
             from jp_screening.analysis.tracking import update_prices, evaluate_outcomes
@@ -207,7 +219,10 @@ def main():
             imports = list(conn.execute(select(s.runs.c.id, s.runs.c.asof, s.runs.c.scope,
                 s.runs.c.eligible, s.runs.c.source).order_by(s.runs.c.asof.desc()).limit(500)).mappings())
         st.caption("取り込んだ実行。eligible=falseの記録は通常集計から除外しています。")
-        show_table([dict(x) for x in imports])
+        show_table([dict(x) for x in imports], {
+            "id": "実行ID", "asof": "判定日", "scope": "対象範囲",
+            "eligible": "通常分析の対象", "source": "結果フォルダー",
+        })
 
 
 try:
