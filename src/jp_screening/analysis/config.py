@@ -16,6 +16,8 @@ class Config:
     embed_model: str
     api_key: str
     auto_import: bool
+    edinet_api_key: str = ""
+    research_enabled: bool = True
 
     @classmethod
     def load(cls, root=None):
@@ -31,4 +33,6 @@ class Config:
                    values.get("OLLAMA_CHAT_MODEL", "llama3.1:8b"),
                    values.get("OLLAMA_EMBED_MODEL", "embeddinggemma:300m"),
                    values.get("JQUANTS_API_KEY", ""),
-                   str(values.get("ANALYSIS_AUTO_IMPORT", "false")).lower() == "true")
+                   str(values.get("ANALYSIS_AUTO_IMPORT", "false")).lower() == "true",
+                   values.get("EDINET_API_KEY", ""),
+                   str(values.get("ANALYSIS_RESEARCH_ENABLED", "true")).lower() == "true")

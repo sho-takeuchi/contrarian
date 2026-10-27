@@ -25,6 +25,7 @@ def main(argv=None):
     p.add_argument("--note", required=True)
     sub.add_parser("update-prices")
     sub.add_parser("evaluate-outcomes")
+    sub.add_parser("rebuild-monitoring")
     p = sub.add_parser("analyze-conditions")
     p.add_argument("--feature", default="daily_ma_gap")
     p.add_argument("--horizon", type=int, choices=[5,20,60,120,250], default=20)
@@ -86,6 +87,10 @@ def main(argv=None):
             from .tracking import update_prices
             result = update_prices(db, config.api_key)
             exit_code = 0 if result["complete"] else 2
+        elif args.command == "rebuild-monitoring":
+            from .monitoring import rebuild
+            from .research import automatic_research
+            result = {"projection":rebuild(db), "research":automatic_research(db, config)}
         elif args.command == "evaluate-outcomes":
             from .tracking import evaluate_outcomes
             result = {"measurements":evaluate_outcomes(db)}

@@ -55,7 +55,7 @@ class PostgreSQLTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        self.config = Config(self.root, TEST_URL, TEST_URL, "http://127.0.0.1:11434", "llama3.1:8b", "embeddinggemma:300m", "fake-test-key", True)
+        self.config = Config(self.root, TEST_URL, TEST_URL, "http://127.0.0.1:11434", "llama3.1:8b", "embeddinggemma:300m", "fake-test-key", True, research_enabled=False)
 
     def rows(self, table):
         with self.db.transaction(readonly=True) as conn:
@@ -312,7 +312,8 @@ class PostgreSQLTests(unittest.TestCase):
         self.load()
         with patch.dict(os.environ,{"ANALYSIS_DATABASE_URL":TEST_URL,"ANALYSIS_READER_URL":TEST_URL}):
             app = AppTest.from_file(str(Path(__file__).parents[1]/"src/jp_screening/analysis/ui.py"),default_timeout=15).run()
-            for page in ["候補・履歴","追跡一覧","条件比較","資料管理","チャット","更新状況"]:
-                app.sidebar.radio[0].set_value(page).run()
-                self.assertFalse(app.exception, page)
-                self.assertFalse(app.error, page)
+            self.assertFalse(app.exception)
+            self.assertFalse(app.error)
+            self.assertEqual([tab.label for tab in app.tabs], ["通過中", "上昇して通過終了", "下落して通過終了", "変化なし・要確認"])
+            self.assertFalse(app.button)
+            self.assertFalse(app.sidebar.radio)

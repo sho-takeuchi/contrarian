@@ -138,6 +138,11 @@ def split_document(content, size=600, overlap=100):
 def index_document(db, ollama, path, code=None, document_date=None, rules_key=None):
     path = Path(path).resolve()
     original = extract(path)
+    return index_text(db, ollama, str(path), path.name, original, code, document_date, rules_key)
+
+
+def index_text(db, ollama, source, title, original, code=None, document_date=None, rules_key=None):
+    """Index automatically collected content without creating user-managed files."""
     pieces = split_document(original)
     if not pieces:
         raise ScreeningError("文字を抽出できませんでした。")
@@ -145,7 +150,7 @@ def index_document(db, ollama, path, code=None, document_date=None, rules_key=No
         raise ScreeningError("資料を分割して登録してください。")
     profile = ollama.profile(ollama.config.embed_model)
     content_hash = sha256(original.encode()).hexdigest()
-    doc_id = digest([str(path), content_hash, profile, code, str(document_date), rules_key])
+    doc_id = digest([source, content_hash, profile, code, str(document_date), rules_key])
     with db.transaction(readonly=True) as conn:
         existing = conn.execute(select(s.documents).where(s.documents.c.id == doc_id)).mappings().first()
     if existing:
@@ -158,9 +163,9 @@ def index_document(db, ollama, path, code=None, document_date=None, rules_key=No
         conn.execute(text("SELECT pg_advisory_xact_lock(18426002)"))
         if conn.execute(select(s.documents.c.id).where(s.documents.c.id == doc_id)).first():
             return dict(id=doc_id, status="skipped")
-        conn.execute(update(s.documents).where(s.documents.c.source == str(path)).values(active=False))
-        conn.execute(s.documents.insert().values(id=doc_id, source=str(path), content_hash=content_hash,
-            profile=profile, title=path.name, created_at=datetime.now(timezone.utc), active=True,
+        conn.execute(update(s.documents).where(s.documents.c.source == source).values(active=False))
+        conn.execute(s.documents.insert().values(id=doc_id, source=source, content_hash=content_hash,
+            profile=profile, title=title, created_at=datetime.now(timezone.utc), active=True,
             code=code5(code) if code else None, document_date=document_date, original=original,
             excluded=False, rules_key=rules_key))
         conn.execute(s.chunks.insert(), [dict(document_id=doc_id, ordinal=i, heading=h, body=body, embedding=v)
