@@ -1,6 +1,8 @@
-# 第2段階の通過銘柄を自動で記録・分析する
+# 自動記録・分析の導入と運用
 
 第1段階の月足と第2段階の週足を両方通過した銘柄を、自動で保存・追跡します。ユーザーは画面で結果を確認するだけで利用できます。
+
+アプリ名は「銘柄の記録と分析（データを蓄積して分析する）」です。全体の目的は [README](../README.md)、手動のスクリーニングと詳細な判定式は [スクリーニングCLI・判定仕様](screening.md) を参照してください。
 
 ## 画面の見方
 
@@ -61,22 +63,122 @@ LLMの出力は資料ID、本文に完全一致する引用、材料の分類に
 
 ## 初回設定・保守
 
-Python 3.11以上、Docker Compose、Ollamaを使用します。通常のスクリーニングに必要な上場日CSVとJ-Quants契約を準備してください。
+Python 3.11以上、Git、Docker Compose、Ollamaを用意します。Dockerの実行環境とOllamaを起動してください。J-QuantsのAPI v2キーと、過去10年の日足・一括取得を利用できる契約を準備します。本実装はStandardプランを前提としています。
+
+### 1. リポジトリとPython環境を用意する
+
+既にリポジトリがある場合は、そのフォルダーを開き、cloneを省略します。既存の`.env`・DB・結果を作り直す必要はありません。
+
+macOS（ターミナル）：
 
 ```sh
-python -m pip install -e ".[analysis]"
-docker compose up -d --wait postgres
-python -m jp_screening.analysis db upgrade
-ollama pull llama3.1:8b
-ollama pull embeddinggemma:300m
-python -m jp_screening.analysis doctor
-python -m jp_screening.analysis import-runs --from outputs
-python -m jp_screening.analysis rebuild-monitoring
-python -m jp_screening.analysis schedule install
-python -m jp_screening.analysis ui
+git clone https://github.com/sho-takeuchi/contrarian.git
+cd contrarian
+python3 -m venv .venv
+./.venv/bin/python -m pip install --upgrade pip
+./.venv/bin/python -m pip install -r requirements-lock.txt
+./.venv/bin/python -m pip install -e ".[analysis]"
 ```
 
-`.env.example`を参考にローカルの`.env`を設定します。既存ファイルを上書きしないでください。環境変数が`.env`より優先されます。
+Windows（PowerShell）：
+
+```powershell
+git clone https://github.com/sho-takeuchi/contrarian.git
+Set-Location contrarian
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt
+.\.venv\Scripts\python.exe -m pip install -e ".[analysis]"
+```
+
+仮想環境の有効化やPowerShellの実行ポリシー変更は不要です。以降も、その仮想環境のPythonを指定します。
+
+### 2. ローカル設定を保存する
+
+リポジトリ直下の`.env.example`をコピーして`.env`を作り、エディターで値を記入します。既存の`.env`は上書きしないでください。環境変数が`.env`より優先されます。
+
+- `POSTGRES_PASSWORD`を自分のDB用パスワードに変更し、`ANALYSIS_DATABASE_URL`内のパスワードにも同じ値を設定します。URLに使う記号は必要に応じてパーセントエンコードします。
+- `JQUANTS_API_KEY`にJ-QuantsのAPI v2キーを設定します。
+- `EDINET_API_KEY`にEDINETのAPIキーを設定します。未設定でも他の処理は進みますが、企業開示は準備待ちになります。
+- Ollamaの接続先・モデルは、まず見本の既定値を使用できます。
+
+キー本体をGitへ追加したり、コマンド引数へ書いたりしないでください。設定項目の一覧はこの節の末尾にあります。
+
+### 3. 上場日CSVを取り込む
+
+[JPXの企業・銘柄情報](https://clientportal.jpx.co.jp/ClientPortal/s/Issue?language=ja)から「全件CSV取得」で上場日を含むCSVを保存し、`inputs/`に置きます。以下のファイル名は、実際に取得した名前へ置き換えます。
+
+macOS：
+
+```sh
+./.venv/bin/python -m jp_screening prepare-listings --listing-file './inputs/JPXから取得したCSV.csv'
+```
+
+Windows（PowerShell）：
+
+```powershell
+.\.venv\Scripts\python.exe -m jp_screening prepare-listings --listing-file '.\inputs\JPXから取得したCSV.csv'
+```
+
+取り込み先は`inputs/listing_dates.csv`です。既に取り込み済みなら省略できます。対応する列名や日付形式は [上場日CSVの用意](screening.md#3-上場日csvの用意) を参照してください。
+
+### 4. DBとローカルモデルを準備する
+
+両OS共通で、リポジトリ直下から次を実行します。
+
+```sh
+docker compose up -d --wait postgres
+ollama pull llama3.1:8b
+ollama pull embeddinggemma:300m
+```
+
+次にDBのマイグレーションと接続診断を実行します。
+
+macOS：
+
+```sh
+./.venv/bin/python -m jp_screening.analysis db upgrade
+./.venv/bin/python -m jp_screening.analysis doctor
+```
+
+Windows（PowerShell）：
+
+```powershell
+.\.venv\Scripts\python.exe -m jp_screening.analysis db upgrade
+.\.venv\Scripts\python.exe -m jp_screening.analysis doctor
+```
+
+`doctor`はDB・回答用モデル・埋め込みモデルを確認します。J-Quants・EDINETの取得成功は、定期処理の実行結果と画面の「資料の取得状況」でも確認してください。
+
+### 5. 既存の結果を取り込み、定期実行と画面を起動する
+
+macOS：
+
+```sh
+./.venv/bin/python -m jp_screening.analysis import-runs --from outputs
+./.venv/bin/python -m jp_screening.analysis rebuild-monitoring
+./.venv/bin/python -m jp_screening.analysis schedule install
+./.venv/bin/python -m jp_screening.analysis schedule status
+./.venv/bin/python -m jp_screening.analysis ui
+```
+
+Windows（PowerShell）：
+
+```powershell
+.\.venv\Scripts\python.exe -m jp_screening.analysis import-runs --from outputs
+.\.venv\Scripts\python.exe -m jp_screening.analysis rebuild-monitoring
+.\.venv\Scripts\python.exe -m jp_screening.analysis schedule install
+.\.venv\Scripts\python.exe -m jp_screening.analysis schedule status
+.\.venv\Scripts\python.exe -m jp_screening.analysis ui
+```
+
+履歴がない初回は、取り込み・再構築の対象が0件でも正常です。デモ・少数検証・事後の再計算は通常の通過履歴に混ぜません。古い形式で対象範囲が不明な記録も、そのまま通常集計へ採用しません。
+
+`ui`を実行したターミナルは開いたままにして、`http://127.0.0.1:8501/`へアクセスします。初回判定は、営業日の18時以降に当日データの公開を確認した定期処理で始まります。18時前ならその日の18時以降、18時以降なら次の確認時に試行します。休日は次の営業日を待ちます。初回は過去10年分の株価を取得するため時間がかかります。表示の「最終成功」と取得状態を確認してください。
+
+`schedule install`が登録するのは15分間隔の更新処理です。Docker・Ollama・画面をログイン時に起動する設定は別途必要です。CLIで起動した画面は、ターミナルを閉じると停止します。
+
+### 設定項目
 
 | 設定 | 内容 |
 |---|---|
@@ -94,6 +196,8 @@ APIキーはコマンド引数・Git・ログ・LLMへ渡しません。Macは`.
 
 保守用CLIは `db upgrade`、`import-runs`、`rebuild-monitoring`、`daily-update --if-due`、`doctor`、`schedule install/status/remove`です。既存の研究用CLIも履歴互換性のため利用できます。
 
+以下の保守例の`python`は、macOSでは`./.venv/bin/python`、Windowsでは`.\.venv\Scripts\python.exe`に置き換えます。別のPythonで定期実行を登録しないでください。
+
 ### Mac・Windowsの定期実行
 
 MacはログインユーザーのLaunchAgent、Windowsは現在のユーザーのタスクに登録します。
@@ -110,6 +214,8 @@ PCを起動・ログインした状態にします。WindowsはPowerShellでも�
 ### バックアップ・復元と障害対応
 
 更新前にDBと`.env`、`outputs/`、`data/knowledge/`、その他ローカル原文資料をバックアップします。バックアップはGitへ追加しません。
+
+先にリポジトリ内に`backups/`を作成します。macOSは`mkdir -p backups`、PowerShellは`New-Item -ItemType Directory -Force backups`を使用できます。
 
 ```sh
 # DBの保存（パスワードはコマンドに書かない）
