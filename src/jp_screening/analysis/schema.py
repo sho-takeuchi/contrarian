@@ -68,3 +68,37 @@ chunks = Table("analysis_chunks", metadata,
 jobs = Table("analysis_jobs", metadata,
     Column("id", Text, primary_key=True), Column("updated_at", DateTime(timezone=True), nullable=False),
     Column("content", JSONB, nullable=False))
+
+# Current projections are rebuildable; revisions and raw observations are retained.
+monitor_periods = Table("monitor_periods", metadata,
+    Column("id", Text, primary_key=True), Column("code", String(5), nullable=False, index=True),
+    Column("rules_key", Text, nullable=False), Column("start_date", Date, nullable=False),
+    Column("end_date", Date), Column("active", Boolean, nullable=False),
+    Column("state", Text, nullable=False), Column("direction", Text, nullable=False),
+    Column("analysis_id", Text),
+    Column("content", JSONB, nullable=False), Column("digest", Text, nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False))
+monitor_revisions = Table("monitor_revisions", metadata,
+    Column("period_id", Text, ForeignKey(monitor_periods.c.id), primary_key=True),
+    Column("digest", Text, primary_key=True), Column("content", JSONB, nullable=False),
+    Column("recorded_at", DateTime(timezone=True), nullable=False))
+monitor_days = Table("monitor_days", metadata,
+    Column("id", Text, primary_key=True), Column("period_id", Text, ForeignKey(monitor_periods.c.id), nullable=False, index=True),
+    Column("day", Date, nullable=False), Column("run_id", Text, ForeignKey(runs.c.id), nullable=False),
+    Column("active", Boolean, nullable=False), Column("content", JSONB, nullable=False))
+monitor_sources = Table("monitor_sources", metadata,
+    Column("id", Text, primary_key=True), Column("code", String(5), nullable=False, index=True),
+    Column("provider", Text, nullable=False), Column("source_key", Text, nullable=False),
+    Column("title", Text, nullable=False), Column("url", Text, nullable=False),
+    Column("published_at", DateTime(timezone=True)), Column("fetched_at", DateTime(timezone=True), nullable=False),
+    Column("body", Text, nullable=False), Column("content", JSONB, nullable=False),
+    Column("document_id", Text, ForeignKey(documents.c.id)), Column("index_state", Text, nullable=False))
+monitor_fetches = Table("monitor_fetches", metadata,
+    Column("id", Text, primary_key=True), Column("provider", Text, nullable=False),
+    Column("code", String(5), nullable=False), Column("state", Text, nullable=False),
+    Column("content", JSONB, nullable=False), Column("updated_at", DateTime(timezone=True), nullable=False))
+monitor_analyses = Table("monitor_analyses", metadata,
+    Column("id", Text, primary_key=True), Column("period_id", Text, ForeignKey(monitor_periods.c.id), index=True),
+    Column("kind", Text, nullable=False), Column("input_hash", Text, nullable=False),
+    Column("state", Text, nullable=False), Column("content", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False))

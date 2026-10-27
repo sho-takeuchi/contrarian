@@ -1,4 +1,4 @@
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timezone, timedelta
 import json
 from pathlib import Path
 
@@ -12,7 +12,8 @@ from . import schema as s
 from .domain import digest
 from .ingest import import_runs, prepare_run
 from .tracking import latest_closed_day, update_prices, evaluate_outcomes
-from .analytics import condition_report
+from .monitoring import rebuild
+from .research import automatic_research
 
 
 def daily_update(config, db, if_due=False, now=None, client=None):
@@ -35,11 +36,14 @@ def daily_update(config, db, if_due=False, now=None, client=None):
             client = client or Client(config.api_key)
             cal = TradingCalendar.from_rows(list(client.rows("/markets/calendar")))
             cutoff = latest_closed_day(cal, now)
+            if cutoff == now.date() and now.hour < 18:
+                cutoff = max(day for day in cal.sessions(now.date()-timedelta(days=30), now.date()) if day < now.date())
         except Exception:
             journal["errors"]["calendar"] = "取引カレンダー・API認証を確認してください。"
             try:
                 journal["imports"] = import_runs(db, root / "outputs")
                 journal["evaluations"] = evaluate_outcomes(db, now)
+                journal["monitoring"] = {"projection":rebuild(db, now)}
             except Exception:
                 journal["errors"]["imports_or_evaluation"] = "保存済みデータの取り込み・評価も未完了です。"
             save()
@@ -53,7 +57,7 @@ def daily_update(config, db, if_due=False, now=None, client=None):
                 for path in (root / "outputs").glob("*/run.json"):
                     try:
                         run, _ = prepare_run(path.parent)
-                        if run["eligible"] and run["asof"] == now.date() and run["stage"] == 3:
+                        if run["eligible"] and run["asof"] == now.date() and run["stage"] >= 2:
                             completed.append(run)
                     except (ScreeningError, OSError, ValueError, KeyError):
                         continue
@@ -63,7 +67,7 @@ def daily_update(config, db, if_due=False, now=None, client=None):
                     published = client.daily(day=now.date())
                     if not published or any(r["Date"] != day for r in published) or not any(r.get("C") for r in published):
                         raise ScreeningError("当日の価格が未公開です。")
-                    folder, _ = run_live(root, "all", config.api_key, stage=3)
+                    folder, _ = run_live(root, "all", config.api_key, stage=2)
                 completed_run, _ = prepare_run(folder)
                 if completed_run["asof"] != now.date():
                     raise ScreeningError("当日の判定記録ではありません。")
@@ -79,12 +83,15 @@ def daily_update(config, db, if_due=False, now=None, client=None):
         except Exception:
             journal["errors"]["imports"] = "DB取り込み失敗。CSVは保存されています。"
         try:
+            projection = rebuild(db, now)
+            journal["monitoring"] = {**journal.get("monitoring", {}), "projection":projection}
             with db.transaction(readonly=True) as conn:
+                codes = set(conn.execute(select(s.monitor_periods.c.code).distinct()).scalars())
                 targets = list(conn.execute(select(s.tracking.c.code, s.tracking.c.first_date).where(
-                    s.tracking.c.paused.is_(False)).order_by(s.tracking.c.code)).mappings())
+                    s.tracking.c.paused.is_(False), s.tracking.c.code.in_(codes)).order_by(s.tracking.c.code)).mappings())
             target_key = digest([str(cutoff), [dict(r) for r in targets]])
             if not if_due or journal.get("prices_key") != target_key:
-                price_report = update_prices(db, config.api_key, now=now, client=client)
+                price_report = update_prices(db, config.api_key, now=now, client=client, codes=codes, asof=cutoff)
                 journal["prices"] = price_report
                 if price_report["complete"]:
                     journal["prices_key"] = target_key
@@ -98,13 +105,18 @@ def daily_update(config, db, if_due=False, now=None, client=None):
             # A retry with incomplete prices recomputes labels as well.
             if not if_due or journal.get("evaluation_key") != data_key or "prices" in journal["errors"]:
                 journal["evaluations"] = evaluate_outcomes(db, now)
-                with db.transaction(readonly=True) as conn:
-                    rules = list(conn.execute(select(s.runs.c.rules_key).where(s.runs.c.eligible.is_(True)).distinct()).scalars())
-                journal["reports"] = [condition_report(db, rules_key=key,
-                    output_root=root / "outputs" / "analysis_reports")["id"] for key in rules]
+                journal["monitoring"]["projection"] = rebuild(db, now)
                 journal["evaluation_key"] = data_key
         except Exception:
             journal["errors"]["prices_or_evaluation"] = "株価更新・評価が未完了です。DB・API設定を確認してください。"
+        save()  # Numerical observations survive a slow or unavailable research service.
+        if not if_due or now.time() >= time(18):
+            try:
+                research = automatic_research(db, config, now, client)
+                journal.setdefault("monitoring", {})["research"] = research
+                journal["reports"] = [research["report_id"]]
+            except Exception:
+                journal.setdefault("monitoring", {})["research_error"] = "自動分析を再試行します。判定・株価は保存済みです。"
         journal["complete"] = not journal["errors"]
         if journal["complete"]:
             journal["last_success"] = now.isoformat()

@@ -74,16 +74,19 @@ def save_prices(db, code, rows, now, expected=None):
     return changed
 
 
-def update_prices(db, key, now=None, client=None):
+def update_prices(db, key, now=None, client=None, codes=None, asof=None):
     now = now or datetime.now(JST)
     client = client or Client(key)
     cal = save_calendar(db, list(client.rows("/markets/calendar")))
-    cutoff = latest_closed_day(cal, now)
+    cutoff = asof or latest_closed_day(cal, now)
     published = client.daily(day=cutoff)
     if not published or any(r["Date"] != str(cutoff) for r in published) or not any(r.get("C") for r in published):
         raise ScreeningError("直近営業日の株価は更新待ちです。古い日付に置き換えません。")
     with db.transaction(readonly=True) as conn:
-        targets = list(conn.execute(select(s.tracking).where(s.tracking.c.paused.is_(False))).mappings())
+        statement = select(s.tracking).where(s.tracking.c.paused.is_(False))
+        if codes is not None:
+            statement = statement.where(s.tracking.c.code.in_(codes))
+        targets = list(conn.execute(statement).mappings())
     report = []
     for target in targets:
         code = target["code"]
