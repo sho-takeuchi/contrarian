@@ -114,6 +114,7 @@ def daily_update(config, db, if_due=False, now=None, client=None):
             try:
                 research = automatic_research(db, config, now, client)
                 journal.setdefault("monitoring", {})["research"] = research
+                journal["monitoring"].pop("research_error", None)
                 journal["reports"] = [research["report_id"]]
             except Exception:
                 journal.setdefault("monitoring", {})["research_error"] = "自動分析を再試行します。判定・株価は保存済みです。"

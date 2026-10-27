@@ -71,7 +71,9 @@ def index_pending(db, ollama, limit=12):
     with db.transaction(readonly=True) as conn:
         pending = list(conn.execute(select(s.monitor_sources).outerjoin(s.documents, s.documents.c.id == s.monitor_sources.c.document_id).where(
             (s.monitor_sources.c.document_id.is_(None) | (s.documents.c.profile != profile)),
-            s.monitor_sources.c.body != "", s.monitor_sources.c.published_at.is_not(None)).order_by(
+            s.monitor_sources.c.body != "", s.monitor_sources.c.published_at.is_not(None),
+            s.monitor_sources.c.content["matched"].as_boolean().is_(True),
+            s.monitor_sources.c.content["body_state"].astext.in_(["本文取得済み", "数値資料"])).order_by(
             s.monitor_sources.c.fetched_at.desc()).limit(limit)).mappings())
     count = 0
     for row in pending:
@@ -184,6 +186,7 @@ def automatic_research(db, config, now=None, api=None, providers=None, ollama=No
     for period in periods:
         coverage = [dict(provider=r["provider"], state=r["state"], note=r["content"].get("note"))
                     for r in fetches if r["code"] == period["code"]]
+        coverage.sort(key=lambda item:item["provider"])
         if collection_error:
             coverage.append(dict(provider="収集処理", state="retry", note=collection_error))
         analyses.append(analyse_period(db, ollama, period, sources, coverage, now))
