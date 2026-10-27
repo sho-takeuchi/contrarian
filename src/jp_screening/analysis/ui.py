@@ -26,7 +26,7 @@ def table(rows, labels):
     numeric = {"price", "latest_pct", "exit_pct", "return_pct", "mean"}
     formatting = {}
     for column in numeric & set(frame.columns):
-        frame[column] = frame[column].map(lambda value:float(dec(value)) if dec(value) is not None else None)
+        frame[column] = frame[column].map(lambda value:None if pd.isna(value) else float(dec(value)) if dec(value) is not None else None)
         formatting[labels.get(column,column)] = st.column_config.NumberColumn(format="%.2f")
     st.dataframe(frame.rename(columns=labels), hide_index=True, width="stretch", column_config=formatting)
 

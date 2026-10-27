@@ -272,7 +272,7 @@ class MonitoringPostgresTests(unittest.TestCase):
         with patch.dict(os.environ,{'ANALYSIS_DATABASE_URL':TEST_URL,'ANALYSIS_READER_URL':TEST_URL}):
             app=AppTest.from_file(str(Path(__file__).parents[1]/'src/jp_screening/analysis/ui.py'),default_timeout=20).run()
         self.assertFalse(app.exception)
-        self.assertFalse(app.error)
+        self.assertFalse(app.error,[item.value for item in app.error])
         self.assertEqual(len(app.tabs),4)
         self.assertFalse(app.button)
         self.assertFalse(app.chat_input)
