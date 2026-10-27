@@ -22,7 +22,13 @@ def table(rows, labels):
     if not rows:
         st.info("該当する記録はまだありません。")
         return
-    st.dataframe(pd.DataFrame(jsonable(rows)).rename(columns=labels), hide_index=True, width="stretch")
+    frame = pd.DataFrame(jsonable(rows))
+    numeric = {"price", "latest_pct", "exit_pct", "return_pct", "mean"}
+    formatting = {}
+    for column in numeric & set(frame.columns):
+        frame[column] = frame[column].map(lambda value:float(dec(value)) if dec(value) is not None else None)
+        formatting[labels.get(column,column)] = st.column_config.NumberColumn(format="%.2f")
+    st.dataframe(frame.rename(columns=labels), hide_index=True, width="stretch", column_config=formatting)
 
 
 def pct(value):
@@ -151,6 +157,10 @@ def render(config):
                     exit_pct=content["exit"]["return_pct"] if content["exit"] else None,
                     reason=content["failure"]["reason"] if content["failure"] else content["last_status"],
                     conclusion=latest[p["id"]]["content"]["conclusion"] if p["id"] in latest else "自動分析待ち"))
+            visible = ("code", "name", "start", "price", "latest_pct") if view == "通過中" else (
+                ("code", "name", "start", "end", "exit_pct", "reason", "conclusion") if view != "変化なし・要確認" else
+                ("code", "name", "start", "reason", "conclusion"))
+            records = [{key:record[key] for key in visible} for record in records]
             table(records, {"code":"銘柄コード", "name":"銘柄名", "start":"通過開始日", "end":"通過終了の確認日",
                 "price":"最新調整後終値（円）", "latest_pct":"最新の開始日比（％）", "exit_pct":"終了時騰落率（％）",
                 "reason":"判定・終了理由", "conclusion":"自動分析の結論"})
