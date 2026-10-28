@@ -19,6 +19,16 @@
 
 **この2段階を両方通過した銘柄が、自動記録・分析の対象です。** 詳細な式や欠損の扱いは [判定仕様](docs/screening.md#7-判定仕様) を参照してください。従来の日足による第3段階の判定も、手動CLIで利用できます。
 
+## チャートのイメージ
+
+同じ架空銘柄が第1〜第3段階の条件をすべて満たす例です。月足の長期安値圏・反発、週足の上向き、日足の短期調整を並べています。実在の銘柄や株価ではありません。
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/screening-chart-shapes-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/screening-chart-shapes-light.png">
+  <img alt="3段階の通過例。月足は長期安値圏で直近3か月の安値を維持し3か月平均を上回る。確定週足は上向きの5週平均より上、日足は下向きの5日平均より下にある。" src="docs/images/screening-chart-shapes-light.png" width="1024">
+</picture>
+
 ## 何を蓄積するのか
 
 「どの銘柄が条件を満たしたか」に加え、「その後どうなったか」を通過期間ごとに残します。
