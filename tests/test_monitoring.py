@@ -265,19 +265,47 @@ class MonitoringPostgresTests(unittest.TestCase):
         self.assertEqual(len(self.rows(s.monitor_sources)),1)
         self.assertIn('waiting_key',{r['state'] for r in first})
 
-    def test_readonly_dashboard_has_fixed_views_and_no_analysis_controls(self):
+    def test_readonly_dashboard_has_chat_without_analysis_controls(self):
         from streamlit.testing.v1 import AppTest
         self.load_ended()
         automatic_research(self.db,self.config,NOW,ollama=FakeLLM())
         with patch.dict(os.environ,{'ANALYSIS_DATABASE_URL':TEST_URL,'ANALYSIS_READER_URL':TEST_URL}):
             app=AppTest.from_file(str(Path(__file__).parents[1]/'src/jp_screening/analysis/ui.py'),default_timeout=20).run()
+            self.assertEqual(len(app.chat_input),1)
+            before={table.name:self.rows(table) for table in s.metadata.sorted_tables}
+            with patch('jp_screening.analysis.pipeline.daily_update',side_effect=AssertionError('No job from chat')), \
+                 patch('jp_screening.analysis.research.automatic_research',side_effect=AssertionError('No research from chat')):
+                app.chat_input[0].set_value('1000はなぜ上昇して通過終了した？').run()
+                app.run()  # A dashboard rerun must not submit the previous question again.
+            self.assertEqual(before,{table.name:self.rows(table) for table in s.metadata.sorted_tables})
         self.assertFalse(app.exception)
         self.assertFalse(app.error,[item.value for item in app.error])
         self.assertEqual(len(app.tabs),4)
         self.assertFalse(app.button)
-        self.assertFalse(app.chat_input)
+        self.assertEqual(len(app.chat_message),2)
         self.assertFalse(app.sidebar.radio)
         self.assertTrue(any('要因を特定できない' in str(x.value) for x in app.markdown))
+
+    def test_chat_uses_readonly_transaction_and_does_not_start_research(self):
+        from jp_screening.analysis.monitor_chat import answer_question
+        self.load_ended()
+        automatic_research(self.db,self.config,NOW,ollama=FakeLLM())
+        test=self
+        class Reader:
+            def transaction(self,readonly=False):
+                test.assertTrue(readonly)
+                return test.db.transaction(readonly=True)
+        before={table.name:self.rows(table) for table in s.metadata.sorted_tables}
+        answer=answer_question(Reader(),'1000の通過終了理由と根拠を教えて')
+        self.assertIn('+10.00％',answer['answer'])
+        self.assertIn('許容上限超過',answer['answer'])
+        self.assertIn('要因を特定できない',answer['answer'])
+        self.assertEqual(len(answer['record_ids']),1)
+        self.assertFalse(answer['source_ids'])
+        absent=answer_question(Reader(),'9999の通過終了理由は？')
+        self.assertFalse(absent['record_ids'])
+        self.assertIn('記録はまだありません',absent['answer'])
+        self.assertEqual(before,{table.name:self.rows(table) for table in s.metadata.sorted_tables})
 
     def test_daily_screening_requests_stage_two_without_user_actions(self):
         from jp_screening.analysis.pipeline import daily_update

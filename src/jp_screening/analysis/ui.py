@@ -14,6 +14,7 @@ from jp_screening.analysis.config import Config
 from jp_screening.analysis.db import Database, jsonable
 from jp_screening.analysis.domain import dec
 from jp_screening.analysis.monitoring import bucket
+from jp_screening.analysis.monitor_chat import answer_question
 
 VIEWS = ("通過中", "上昇して通過終了", "下落して通過終了", "変化なし・要確認")
 
@@ -34,6 +35,39 @@ def table(rows, labels):
 def pct(value):
     number = dec(value)
     return f"{number:+.2f}％" if number is not None else "確認待ち"
+
+
+def render_chat(config):
+    with st.expander("チャットで質問する", expanded=True):
+        st.caption("保存済みの判定・株価・自動分析を参照して回答します。質問によって収集や分析の定期処理を開始することはありません。")
+        st.write("例：『上昇して通過終了した銘柄は、なぜ終了した？』『下落して通過終了した理由と根拠を教えて』『2499の記録は？』")
+        messages = st.session_state.setdefault("monitor_chat_messages", [])
+        for message in messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+        prompt = st.chat_input("銘柄コード・銘柄名、または上昇／下落について質問", max_chars=1000, key="monitor_chat_input")
+        if prompt:
+            messages.append({"role":"user", "content":prompt})
+            with st.chat_message("user"):
+                st.write(prompt)
+            db = None
+            with st.chat_message("assistant"):
+                try:
+                    db = Database(config.reader_url)
+                    response = answer_question(db, prompt, st.session_state.get("monitor_chat_context"))
+                    st.session_state["monitor_chat_context"] = response["context"]
+                    answer = response["answer"]
+                except ScreeningError as exc:
+                    answer = str(exc)
+                except Exception:
+                    answer = "保存済みの記録を読み出せませんでした。自動更新の状態を確認し、もう一度質問してください。"
+                finally:
+                    if db is not None:
+                        db.engine.dispose()
+                st.markdown(answer)
+            messages.append({"role":"assistant", "content":answer})
+            st.session_state["monitor_chat_messages"] = messages[-20:]
+        st.caption("会話はこのブラウザのセッション内に保持します。日付を指定する場合はYYYY-MM-DDを使用し、終了確認日（通過中は開始日）で絞り込みます。")
 
 
 def date_text(value):
@@ -180,6 +214,11 @@ def main():
     st.title("銘柄の記録と分析（データを蓄積して分析する）")
     st.caption("登録・株価更新・分析は自動で進みます。銘柄を選ぶと、履歴と分析の根拠を確認できます。")
     config = Config.load(args.root)
+    # Chat is outside the timed dashboard fragment: refreshes never resubmit a question.
+    @st.fragment
+    def chat():
+        render_chat(config)
+    chat()
     @st.fragment(run_every="60s")
     def dashboard():
         try:
