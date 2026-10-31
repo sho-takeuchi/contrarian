@@ -18,7 +18,7 @@ def command(root):
 
 def mac_definition(root):
     return dict(Label=LABEL, ProgramArguments=command(root), WorkingDirectory=str(root),
-                StartInterval=900, RunAtLoad=True, ProcessType="Background",
+                StartInterval=3600, RunAtLoad=True, ProcessType="Background",
                 StandardOutPath=str(root / "logs" / "analysis-schedule.log"),
                 StandardErrorPath=str(root / "logs" / "analysis-schedule-error.log"))
 
@@ -30,7 +30,7 @@ def windows_definition(root):
     return f'''<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <Triggers><LogonTrigger><Enabled>true</Enabled><UserId>{escape(user)}</UserId></LogonTrigger>
-  <TimeTrigger><Repetition><Interval>PT15M</Interval><StopAtDurationEnd>false</StopAtDurationEnd></Repetition>
+  <TimeTrigger><Repetition><Interval>PT60M</Interval><StopAtDurationEnd>false</StopAtDurationEnd></Repetition>
   <StartBoundary>{datetime.now().replace(microsecond=0).isoformat()}</StartBoundary><Enabled>true</Enabled></TimeTrigger></Triggers>
   <Principals><Principal id="User"><UserId>{escape(user)}</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>
   <Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>

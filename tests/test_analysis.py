@@ -187,21 +187,21 @@ class InputAndSchedulerTests(unittest.TestCase):
             with self.assertRaises(ScreeningError):
                 Config.load(tmp)
 
-    def test_mac_and_windows_schedule_is_15_minutes_and_user_only(self):
+    def test_mac_and_windows_schedule_is_60_minutes_and_user_only(self):
         root = Path("/tmp/example project")
         mac = mac_definition(root)
-        self.assertEqual(mac["StartInterval"],900)
+        self.assertEqual(mac["StartInterval"],3600)
         self.assertIn(str(root),mac["ProgramArguments"])
         xml = ElementTree.fromstring(windows_definition(root))
         ns = {"t":"http://schemas.microsoft.com/windows/2004/02/mit/task"}
-        self.assertEqual(xml.find(".//t:Interval",ns).text,"PT15M")
+        self.assertEqual(xml.find(".//t:Interval",ns).text,"PT60M")
         self.assertEqual(xml.find(".//t:LogonType",ns).text,"InteractiveToken")
         self.assertEqual(xml.find(".//t:RunLevel",ns).text,"LeastPrivilege")
 
     def test_scheduler_dry_run_never_registers(self):
         with patch("jp_screening.analysis.schedule.sys.platform","darwin"), patch("subprocess.run") as run:
             definition = manage(Path.cwd(),"install",True)
-            self.assertEqual(plistlib.loads(definition.encode())["StartInterval"],900)
+            self.assertEqual(plistlib.loads(definition.encode())["StartInterval"],3600)
             run.assert_not_called()
 
     def test_market_close_and_holiday(self):
