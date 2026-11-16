@@ -159,6 +159,10 @@ def answer_question(db, question, previous=None):
     question = question.strip()
     if not question or len(question) > 1000:
         raise ScreeningError("質問は1〜1000文字で入力してください。")
+    from .portfolio_chat import answer_portfolio
+    portfolio_answer = answer_portfolio(db, question, previous)
+    if portfolio_answer is not None:
+        return portfolio_answer
     with db.transaction(readonly=True) as conn:
         periods = [dict(r) for r in conn.execute(select(s.monitor_periods).where(
             s.monitor_periods.c.active.is_(True))).mappings()]
