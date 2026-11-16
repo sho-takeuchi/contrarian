@@ -31,7 +31,7 @@ def table(rows, labels):
     for column in numeric & set(frame.columns):
         frame[column] = frame[column].map(lambda value:None if pd.isna(value) else float(dec(value)) if dec(value) is not None else None)
         formatting[labels.get(column,column)] = st.column_config.NumberColumn(format="%.2f")
-    st.dataframe(frame.rename(columns=labels), hide_index=True, width="stretch", column_config=formatting)
+    st.dataframe(frame.rename(columns=labels).style.format(na_rep="—"), hide_index=True, width="stretch", column_config=formatting)
 
 
 def pct(value):
@@ -140,14 +140,17 @@ def render_portfolio(db):
             st.warning("売買履歴の同期が2時間以上空いています。Google Driveの接続と定期同期を確認してください。")
     records = []
     for position in data["positions"]:
-        records.append({key:position[key] for key in ("code", "name", "account", "quantity", "average_cost", "price_day",
-            "price", "market_value", "unrealized", "return_pct", "realized", "status", "stage1", "stage2")})
+        records.append({key:position[key] for key in ("code", "name", "status", "quantity", "average_cost", "price_day",
+            "price", "unrealized", "return_pct")})
     table(records, {"code":"銘柄コード", "name":"銘柄名", "account":"口座", "quantity":"保有株数", "average_cost":"平均取得単価（円）",
         "price_day":"株価の日付", "price":"確定終値（円）", "market_value":"評価額（円）", "unrealized":"評価損益（円）",
         "return_pct":"評価損益率（％）", "realized":"確定損益（円）", "status":"評価状態", "stage1":"最新の月足判定", "stage2":"最新の週足判定"})
     st.caption("取得原価は移動平均で計算し、売買履歴にある手数料・税金等・諸費用を含めます。株式分割・併合を考慮し、配当・譲渡益課税は含みません。")
     for position in data["positions"]:
-        with st.expander(position["code"] + " " + position["name"] + "／推薦理由・買付履歴"):
+        with st.expander(position["code"] + " " + position["name"] + "／" + position["account"] + "／推薦理由・買付履歴"):
+            st.write("評価額：", "確認待ち" if position["market_value"] is None else f"{position['market_value']:,.2f}円")
+            st.write("確定損益：", "確認待ち" if position["realized"] is None else f"{position['realized']:+,.2f}円")
+            st.caption(f"最新判定：{position['screening_date'] or '未観測'}／月足 {position['stage1']}／週足 {position['stage2']}")
             for recommendation in position["recommendations"]:
                 st.write("推薦日：", recommendation["recommended_on"] or "未確認")
                 st.write("推薦理由：", recommendation["reason"])
