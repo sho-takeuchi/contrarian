@@ -33,7 +33,8 @@ def quotes():
 class PortfolioTests(unittest.TestCase):
     def test_end_of_day_valuation_waits_for_the_scheduled_publication_window(self):
         from jp_screening.analysis.portfolio import valuation_cutoff
-        cal = TradingCalendar({day:'1' for day in DAYS})
+        cal = TradingCalendar({DAY+timedelta(days=i):'1' if (DAY+timedelta(days=i)).weekday() < 5 else '0'
+                               for i in range(-35, 5)})
         now = datetime(2026,1,7,16,tzinfo=JST)
         self.assertEqual(valuation_cutoff(cal, now), DAYS[1])
         self.assertEqual(valuation_cutoff(cal, now.replace(hour=18)), DAYS[2])
