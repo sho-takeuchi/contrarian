@@ -8,7 +8,7 @@ try:
     from jp_screening.analysis.portfolio import HEADERS, prepare_snapshot, calculate_position
 except ModuleNotFoundError:
     raise unittest.SkipTest('Install .[analysis].')
-from jp_screening.core import JST, ScreeningError
+from jp_screening.core import JST, ScreeningError, TradingCalendar
 
 DAY = date(2026, 1, 5)
 DAYS = [DAY + timedelta(days=i) for i in range(5)]
@@ -31,6 +31,13 @@ def quotes():
 
 
 class PortfolioTests(unittest.TestCase):
+    def test_end_of_day_valuation_waits_for_the_scheduled_publication_window(self):
+        from jp_screening.analysis.portfolio import valuation_cutoff
+        cal = TradingCalendar({day:'1' for day in DAYS})
+        now = datetime(2026,1,7,16,tzinfo=JST)
+        self.assertEqual(valuation_cutoff(cal, now), DAYS[1])
+        self.assertEqual(valuation_cutoff(cal, now.replace(hour=18)), DAYS[2])
+
     def test_snapshot_repeat_rename_and_identical_execution(self):
         payload = snapshot()
         source, first, _, rows = prepare_snapshot(payload)

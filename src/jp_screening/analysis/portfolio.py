@@ -247,16 +247,27 @@ def portfolio_data(conn):
     return trades, groups, quotes, sessions
 
 
+def valuation_cutoff(cal, now):
+    from .tracking import latest_closed_day
+    now = now.astimezone(JST)
+    cutoff = latest_closed_day(cal, now)
+    if cutoff == now.date() and now.hour < 18:
+        previous = [day for day in cal.sessions(now.date()-timedelta(days=30), now.date()) if day < now.date()]
+        if not previous:
+            raise ScreeningError("前営業日の取引カレンダーを確認してください。")
+        cutoff = previous[-1]
+    return cutoff
+
+
 def evaluate_portfolio(db, now=None):
     now = now or datetime.now(JST)
-    from .tracking import latest_closed_day
     with db.transaction() as conn:
         conn.execute(text(f"SELECT pg_advisory_xact_lock({LOCK})"))
         _, groups, quotes, sessions = portfolio_data(conn)
         if not groups or not sessions:
             return dict(saved=0, securities=len(groups))
         cal = TradingCalendar({row["day"]:row["kind"] for row in conn.execute(select(s.calendar)).mappings()})
-        asof = latest_closed_day(cal, now)
+        asof = valuation_cutoff(cal, now)
         count = 0
         for (code, account), trades in groups.items():
             days = sorted(day for day in sessions if trades[0]["trade_date"] <= day <= asof and day in quotes[code])
@@ -273,11 +284,10 @@ def evaluate_portfolio(db, now=None):
 
 def overview(db, now=None):
     now = now or datetime.now(JST)
-    from .tracking import latest_closed_day
     with db.transaction(readonly=True) as conn:
         trades, groups, quotes, sessions = portfolio_data(conn)
         cal = TradingCalendar({row["day"]:row["kind"] for row in conn.execute(select(s.calendar)).mappings()})
-        cutoff = latest_closed_day(cal, now) if sessions else now.astimezone(JST).date()
+        cutoff = valuation_cutoff(cal, now) if sessions else now.astimezone(JST).date()
         recommendations = {row["trade_key"]:dict(row) for row in conn.execute(select(
             s.recommendations, s.portfolio_links.c.trade_key).join(
             s.portfolio_links, s.recommendations.c.id == s.portfolio_links.c.recommendation_id)).mappings()}
