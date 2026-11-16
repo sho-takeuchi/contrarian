@@ -38,6 +38,12 @@ def main(argv=None):
     p.add_argument("--dry-run", action="store_true")
     sub.add_parser("ui")
     sub.add_parser("doctor")
+    p = sub.add_parser("import-trades", help="Google Sheetsから取得済みの売買履歴を保存")
+    p.add_argument("--from", dest="source", type=Path, required=True)
+    p = sub.add_parser("register-recommendations", help="推薦の理由・出典を保存")
+    p.add_argument("--from", dest="source", type=Path, required=True)
+    sub.add_parser("evaluate-portfolio")
+    sub.add_parser("portfolio")
     args = parser.parse_args(argv)
     try:
         from .config import Config
@@ -71,6 +77,19 @@ def main(argv=None):
             from .ingest import import_runs
             result = import_runs(db, args.source)
             exit_code = 2 if any(r["status"] == "failed" for r in result) else 0
+        elif args.command == "import-trades":
+            from .portfolio import import_snapshot, evaluate_portfolio
+            result = import_snapshot(db, json.loads(args.source.read_text(encoding="utf-8-sig")))
+            result["evaluation"] = evaluate_portfolio(db)
+        elif args.command == "register-recommendations":
+            from .portfolio import register_recommendations
+            result = {"registered":register_recommendations(db, json.loads(args.source.read_text(encoding="utf-8-sig")))}
+        elif args.command == "evaluate-portfolio":
+            from .portfolio import evaluate_portfolio
+            result = evaluate_portfolio(db)
+        elif args.command == "portfolio":
+            from .portfolio import overview
+            result = overview(db)
         elif args.command == "index-docs":
             from .rag import Ollama, index_document
             paths = [args.source] if args.source.is_file() else sorted(p for p in args.source.rglob("*")

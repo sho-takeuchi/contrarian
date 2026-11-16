@@ -387,7 +387,7 @@ class MonitoringPostgresTests(unittest.TestCase):
         try:
             with temp.transaction() as conn:
                 conn.execute(text('CREATE EXTENSION vector'))
-                original=[t for t in s.metadata.sorted_tables if not t.name.startswith('monitor_')]
+                original=[t for t in s.metadata.sorted_tables if not t.name.startswith(('monitor_', 'portfolio_'))]
                 s.metadata.create_all(conn,tables=original)
                 conn.execute(text("CREATE TABLE analysis_schema_version (version_num varchar(32) primary key)"))
                 conn.execute(text("INSERT INTO analysis_schema_version VALUES ('analysis_001')"))
@@ -395,8 +395,9 @@ class MonitoringPostgresTests(unittest.TestCase):
             temp.upgrade()
             with temp.transaction(readonly=True) as conn:
                 self.assertEqual(conn.execute(text("SELECT count(*) FROM analysis_jobs")).scalar_one(),1)
-                self.assertEqual(conn.execute(text("SELECT version_num FROM analysis_schema_version")).scalar_one(),'analysis_002')
+                self.assertEqual(conn.execute(text("SELECT version_num FROM analysis_schema_version")).scalar_one(),'analysis_003')
                 self.assertEqual(conn.execute(text("SELECT count(*) FROM monitor_periods")).scalar_one(),0)
+                self.assertEqual(conn.execute(text("SELECT count(*) FROM portfolio_trades")).scalar_one(),0)
         finally:
             temp.engine.dispose()
             with self.db.engine.connect().execution_options(isolation_level='AUTOCOMMIT') as conn:

@@ -14,6 +14,7 @@ from .ingest import import_runs, prepare_run
 from .tracking import latest_closed_day, update_prices, evaluate_outcomes
 from .monitoring import rebuild
 from .research import automatic_research
+from .portfolio import portfolio_codes, evaluate_portfolio
 
 
 def daily_update(config, db, if_due=False, now=None, client=None):
@@ -44,6 +45,7 @@ def daily_update(config, db, if_due=False, now=None, client=None):
                 journal["imports"] = import_runs(db, root / "outputs")
                 journal["evaluations"] = evaluate_outcomes(db, now)
                 journal["monitoring"] = {"projection":rebuild(db, now)}
+                journal["portfolio"] = evaluate_portfolio(db, now)
             except Exception:
                 journal["errors"]["imports_or_evaluation"] = "保存済みデータの取り込み・評価も未完了です。"
             save()
@@ -87,6 +89,7 @@ def daily_update(config, db, if_due=False, now=None, client=None):
             journal["monitoring"] = {**journal.get("monitoring", {}), "projection":projection}
             with db.transaction(readonly=True) as conn:
                 codes = set(conn.execute(select(s.monitor_periods.c.code).distinct()).scalars())
+                codes.update(portfolio_codes(conn))
                 targets = list(conn.execute(select(s.tracking.c.code, s.tracking.c.first_date).where(
                     s.tracking.c.paused.is_(False), s.tracking.c.code.in_(codes)).order_by(s.tracking.c.code)).mappings())
             target_key = digest([str(cutoff), [dict(r) for r in targets]])
@@ -107,6 +110,7 @@ def daily_update(config, db, if_due=False, now=None, client=None):
                 journal["evaluations"] = evaluate_outcomes(db, now)
                 journal["monitoring"]["projection"] = rebuild(db, now)
                 journal["evaluation_key"] = data_key
+            journal["portfolio"] = evaluate_portfolio(db, now)
         except Exception:
             journal["errors"]["prices_or_evaluation"] = "株価更新・評価が未完了です。DB・API設定を確認してください。"
         save()  # Numerical observations survive a slow or unavailable research service.
