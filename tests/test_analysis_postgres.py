@@ -317,3 +317,95 @@ class PostgreSQLTests(unittest.TestCase):
             self.assertEqual([tab.label for tab in app.tabs], ["通過中", "上昇して通過終了", "下落して通過終了", "変化なし・要確認"])
             self.assertFalse(app.button)
             self.assertFalse(app.sidebar.radio)
+
+    def test_portfolio_snapshot_retries_duplicates_and_corrections_keep_history(self):
+        from copy import deepcopy
+        from jp_screening.analysis.portfolio import import_snapshot, overview
+        from jp_screening.analysis.tracking import save_calendar
+        from test_portfolio import snapshot
+        from analysis_support import CALENDAR
+        payload = snapshot()
+        save_calendar(self.db, CALENDAR)
+        self.assertEqual(import_snapshot(self.db, payload)['status'], 'imported')
+        self.assertEqual(import_snapshot(self.db, payload)['status'], 'skipped')
+        self.assertEqual(len(self.rows(s.portfolio_trades)), 1)
+        self.assertEqual(self.rows(s.tracking)[0]['first_date'], START)
+        save_prices(self.db, '10000', quotes(), NOW)
+        changed = deepcopy(payload)
+        changed['observed_at'] = '2026-01-09T19:00:00+09:00'
+        changed['values'].append(changed['values'][1])
+        import_snapshot(self.db, changed)
+        value = overview(self.db, NOW)['positions'][0]
+        self.assertEqual(value['quantity'], 200)
+        self.assertEqual(len(self.rows(s.portfolio_imports)), 2)
+        self.assertEqual(len(self.rows(s.portfolio_trades)), 3)
+        with self.assertRaisesRegex(ScreeningError, '新しい'):
+            import_snapshot(self.db, payload)
+        changed['observed_at'] = '2026-01-09T20:00:00+09:00'
+        changed['values'] = changed['values'][:1]
+        import_snapshot(self.db, changed)
+        self.assertEqual(overview(self.db, NOW)['positions'], [])
+        self.assertEqual(len(self.rows(s.portfolio_trades)), 3)
+
+    def test_portfolio_prices_revision_and_recommendations_preserve_originals(self):
+        from jp_screening.analysis.portfolio import import_snapshot, register_recommendations, evaluate_portfolio, overview
+        from jp_screening.analysis.tracking import save_calendar
+        from test_portfolio import snapshot
+        from analysis_support import CALENDAR
+        save_calendar(self.db, CALENDAR)
+        import_snapshot(self.db, snapshot())
+        first = dict(code='1000', name='架空企業', recommended_on=str(START), reason='確認できた収益改善',
+                     risks='費用増', source='合成テストの推薦記録')
+        register_recommendations(self.db, [first], NOW)
+        before = self.rows(s.recommendations)[0]
+        register_recommendations(self.db, [{**first, 'reason':'後日の別の推薦'}], NOW)
+        self.assertEqual(len(self.rows(s.recommendations)), 2)
+        self.assertEqual(self.rows(s.portfolio_links)[0]['recommendation_id'], before['id'])
+        raw = quotes()
+        save_prices(self.db, '10000', raw, NOW)
+        self.assertGreater(evaluate_portfolio(self.db, NOW)['saved'], 0)
+        self.assertEqual(evaluate_portfolio(self.db, NOW)['saved'], 0)
+        count = len(self.rows(s.portfolio_values))
+        raw[-1]['C'] = 120
+        save_prices(self.db, '10000', raw, NOW)
+        self.assertGreater(evaluate_portfolio(self.db, NOW)['saved'], 0)
+        self.assertGreater(len(self.rows(s.portfolio_values)), count)
+        self.assertEqual(self.rows(s.recommendations)[0]['content'], before['content'])
+        value = overview(self.db, NOW)['positions'][0]
+        self.assertEqual(value['recommendations'][0]['id'], before['id'])
+        self.assertEqual(value['unrealized'], 1989)
+
+    def test_portfolio_is_tracked_without_passing_screen_and_chat_is_readonly(self):
+        from jp_screening.analysis.portfolio import import_snapshot, register_recommendations
+        from jp_screening.analysis.monitor_chat import answer_question
+        from test_portfolio import snapshot
+        payload = snapshot()
+        payload['values'][1][2] = '2000'
+        import_snapshot(self.db, payload)
+        register_recommendations(self.db, [dict(code='2000', name='架空企業', recommended_on=None,
+            reason='元のチャットで推薦', risks='推薦日は未確認', source='合成テスト')], NOW)
+        self.load()
+        api = FakeAPI({'10000':quotes(), '20000':quotes('20000')})
+        with patch('jp_screening.analysis.pipeline.run_live', side_effect=ScreeningError('offline')):
+            report = daily_update(self.config, self.db, True, NOW, api)
+        self.assertTrue(any(call[0] == '20000' for call in api.calls))
+        self.assertIn('portfolio', report)
+        response = answer_question(self.db, '2000の買付履歴と推薦理由は？')
+        self.assertIn('元のチャットで推薦', response['answer'])
+        self.assertIn('100.00株', response['answer'])
+        self.assertIn('未確認', response['answer'])
+        self.assertEqual(len(self.rows(s.portfolio_imports)), 1)
+
+    def test_portfolio_dashboard_displays_trades_and_pending_prices(self):
+        from jp_screening.analysis.portfolio import import_snapshot, register_recommendations
+        from test_portfolio import snapshot
+        from streamlit.testing.v1 import AppTest
+        self.load()
+        import_snapshot(self.db, snapshot())
+        register_recommendations(self.db, [dict(code='1000', name='架空企業', recommended_on=None,
+            reason='元の推薦理由', risks='原材料費', source='合成テスト')], NOW)
+        with patch.dict(os.environ, {'ANALYSIS_DATABASE_URL':TEST_URL,'ANALYSIS_READER_URL':TEST_URL}):
+            app = AppTest.from_file(str(Path(__file__).parents[1]/'src/jp_screening/analysis/ui.py'), default_timeout=15).run()
+            self.assertFalse(app.exception)
+            self.assertFalse(app.error)
+            self.assertTrue(any('推薦から購入' in item.value for item in app.subheader))

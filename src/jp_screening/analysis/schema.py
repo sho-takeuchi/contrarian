@@ -102,3 +102,34 @@ monitor_analyses = Table("monitor_analyses", metadata,
     Column("kind", Text, nullable=False), Column("input_hash", Text, nullable=False),
     Column("state", Text, nullable=False), Column("content", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False))
+
+portfolio_sources = Table("portfolio_sources", metadata,
+    Column("id", Text, primary_key=True), Column("url", Text, nullable=False),
+    Column("sheet_name", Text, nullable=False), Column("snapshot_id", Text),
+    Column("checked_at", DateTime(timezone=True), nullable=False))
+portfolio_imports = Table("portfolio_imports", metadata,
+    Column("id", Text, primary_key=True), Column("source_id", Text, ForeignKey(portfolio_sources.c.id), nullable=False),
+    Column("observed_at", DateTime(timezone=True), nullable=False),
+    Column("content", JSONB, nullable=False))
+recommendations = Table("portfolio_recommendations", metadata,
+    Column("id", Text, primary_key=True), Column("code", String(5), nullable=False, index=True),
+    Column("name", Text, nullable=False), Column("recommended_on", Date),
+    Column("recorded_at", DateTime(timezone=True), nullable=False),
+    Column("reason", Text, nullable=False), Column("risks", Text, nullable=False),
+    Column("source", Text, nullable=False), Column("content", JSONB, nullable=False))
+portfolio_trades = Table("portfolio_trades", metadata,
+    Column("snapshot_id", Text, ForeignKey(portfolio_imports.c.id), primary_key=True),
+    Column("ordinal", Integer, primary_key=True), Column("trade_date", Date, nullable=False),
+    Column("trade_key", Text, nullable=False, index=True),
+    Column("settlement_date", Date), Column("code", String(5), nullable=False),
+    Column("name", Text, nullable=False), Column("account", Text, nullable=False),
+    Column("side", Text, nullable=False), Column("quantity", Numeric, nullable=False),
+    Column("unit_price", Numeric, nullable=False), Column("costs", Numeric, nullable=False),
+    Column("raw", JSONB, nullable=False))
+portfolio_links = Table("portfolio_links", metadata,
+    Column("trade_key", Text, primary_key=True),
+    Column("recommendation_id", Text, ForeignKey(recommendations.c.id), nullable=False))
+portfolio_values = Table("portfolio_values", metadata,
+    Column("day", Date, primary_key=True), Column("code", String(5), primary_key=True),
+    Column("account", Text, primary_key=True), Column("input_hash", Text, primary_key=True),
+    Column("content", JSONB, nullable=False), Column("created_at", DateTime(timezone=True), nullable=False))

@@ -15,6 +15,7 @@ from jp_screening.analysis.db import Database, jsonable
 from jp_screening.analysis.domain import dec
 from jp_screening.analysis.monitoring import bucket
 from jp_screening.analysis.monitor_chat import answer_question
+from jp_screening.analysis.portfolio import overview
 
 VIEWS = ("通過中", "上昇して通過終了", "下落して通過終了", "変化なし・要確認")
 
@@ -24,7 +25,8 @@ def table(rows, labels):
         st.info("該当する記録はまだありません。")
         return
     frame = pd.DataFrame(jsonable(rows))
-    numeric = {"price", "latest_pct", "exit_pct", "return_pct", "mean"}
+    numeric = {"price", "latest_pct", "exit_pct", "return_pct", "mean", "quantity", "average_cost",
+               "cost", "market_value", "unrealized", "realized", "unit_price", "costs"}
     formatting = {}
     for column in numeric & set(frame.columns):
         frame[column] = frame[column].map(lambda value:None if pd.isna(value) else float(dec(value)) if dec(value) is not None else None)
@@ -40,7 +42,7 @@ def pct(value):
 def render_chat(config):
     with st.expander("チャットで質問する", expanded=True):
         st.caption("保存済みの判定・株価・自動分析を参照して回答します。質問によって収集や分析の定期処理を開始することはありません。")
-        st.write("例：『上昇して通過終了した銘柄は、なぜ終了した？』『下落して通過終了した理由と根拠を教えて』『2499の記録は？』")
+        st.write("例：『保有銘柄の損益は？』『幸楽苑の推薦理由と買付履歴は？』『上昇して通過終了した理由は？』")
         messages = st.session_state.setdefault("monitor_chat_messages", [])
         for message in messages:
             with st.chat_message(message["role"]):
@@ -127,8 +129,43 @@ def detail(db, period, analysis):
         st.caption("判定ルール：" + period["rules_key"][:12] + "　／　基準価格は通過開始日の終値。配当・売買費用は含みません。")
 
 
+def render_portfolio(db):
+    data = overview(db)
+    if not data["sources"]:
+        return
+    st.subheader("推薦から購入した銘柄")
+    for source in data["sources"]:
+        st.caption("売買履歴の最終取得：" + date_text(source["checked_at"]))
+        if (datetime.now(JST) - source["checked_at"]).total_seconds() > 7200:
+            st.warning("売買履歴の同期が2時間以上空いています。Google Driveの接続と定期同期を確認してください。")
+    records = []
+    for position in data["positions"]:
+        records.append({key:position[key] for key in ("code", "name", "account", "quantity", "average_cost", "price_day",
+            "price", "market_value", "unrealized", "return_pct", "realized", "status", "stage1", "stage2")})
+    table(records, {"code":"銘柄コード", "name":"銘柄名", "account":"口座", "quantity":"保有株数", "average_cost":"平均取得単価（円）",
+        "price_day":"株価の日付", "price":"確定終値（円）", "market_value":"評価額（円）", "unrealized":"評価損益（円）",
+        "return_pct":"評価損益率（％）", "realized":"確定損益（円）", "status":"評価状態", "stage1":"最新の月足判定", "stage2":"最新の週足判定"})
+    st.caption("取得原価は移動平均で計算し、売買履歴にある手数料・税金等・諸費用を含めます。株式分割・併合を考慮し、配当・譲渡益課税は含みません。")
+    for position in data["positions"]:
+        with st.expander(position["code"] + " " + position["name"] + "／推薦理由・買付履歴"):
+            for recommendation in position["recommendations"]:
+                st.write("推薦日：", recommendation["recommended_on"] or "未確認")
+                st.write("推薦理由：", recommendation["reason"])
+                st.write("推薦時の注意点：", recommendation["risks"])
+                st.caption("出典：" + recommendation["source"])
+                context = recommendation["content"].get("screening_at_registration")
+                if context:
+                    st.caption(f"推薦日前までに確定した判定：{context['asof']}／実行ID {context['run_id']}")
+            if not position["recommendations"]:
+                st.info("推薦理由は未登録です。")
+            trades = [row for row in data["trades"] if row["code"] == position["code"] and row["account"] == position["account"]]
+            table([{key:row[key] for key in ("trade_date", "settlement_date", "side", "quantity", "unit_price", "costs")} for row in trades],
+                {"trade_date":"約定日", "settlement_date":"受渡日", "side":"売買", "quantity":"株数", "unit_price":"単価（円）", "costs":"費用合計（円）"})
+
+
 def render(config):
     db = Database(config.reader_url)
+    render_portfolio(db)
     with db.transaction(readonly=True) as conn:
         periods = [dict(r) for r in conn.execute(select(s.monitor_periods).where(s.monitor_periods.c.active.is_(True)).order_by(
             s.monitor_periods.c.start_date.desc(), s.monitor_periods.c.code)).mappings()]
